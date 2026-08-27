@@ -1,0 +1,19 @@
+[project]
+name = "ksef-qr"
+version = "1.0.0"
+description = "Czyta fakturę KSeF (XML, schemat FA) i generuje kod QR z danymi przelewu"
+requires-python = ">=3.10"
+dependencies = ["qrcode[pil]>=7.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+ksef-qr = "ksef_qr.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ksef_qr"]

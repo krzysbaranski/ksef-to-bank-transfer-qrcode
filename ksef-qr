@@ -1,0 +1,5 @@
+#!/bin/sh
+# Uruchamia CLI z lokalnego venv bez potrzeby instalacji pakietu.
+DIR=$(cd "$(dirname "$0")" && pwd)
+if [ -x "$DIR/.venv/bin/python" ]; then PY="$DIR/.venv/bin/python"; else PY=python3; fi
+PYTHONPATH="$DIR${PYTHONPATH:+:$PYTHONPATH}" exec "$PY" -m ksef_qr.cli "$@"

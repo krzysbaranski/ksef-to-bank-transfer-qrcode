@@ -123,3 +123,26 @@ ksef_qr/render.py    rysowanie QR w terminalu, zapis PNG/SVG
 ksef_qr/cli.py       argumenty, podsumowanie, obsługa wsadu
 tests/resources/     fikcyjna faktura używana w testach
 ```
+
+## Licencja i wyłączenie odpowiedzialności
+
+Kod udostępniony na licencji [GNU General Public License v2.0](LICENSE) (GPL-2.0-only).
+Wolno go używać, modyfikować i rozpowszechniać, ale jest to licencja typu **copyleft**:
+rozpowszechniane wersje pochodne muszą być udostępnione na tej samej licencji, wraz z kodem
+źródłowym.
+
+Zgodnie z sekcjami 11 i 12 licencji oprogramowanie dostarczane jest **„TAKIM, JAKIE JEST"
+(AS IS), bez jakiejkolwiek gwarancji** — wyraźnej ani dorozumianej, w tym gwarancji przydatności
+handlowej i przydatności do określonego celu. Autor nie ponosi odpowiedzialności za żadne szkody
+wynikłe z użycia programu — w szczególności za **przelewy wykonane na podstawie wygenerowanego
+kodu QR**.
+
+Ma to praktyczne znaczenie, bo narzędzie przetwarza dane finansowe:
+
+- faktura może zawierać błędne albo celowo spreparowane dane (numer rachunku, kwotę),
+- wystawcy zapisują dane niezgodnie ze schemą (patrz sekcja o zamienionych polach rachunku),
+- limity standardu ZBP wymuszają skracanie nazwy odbiorcy i tytułu przelewu.
+
+**Przed zatwierdzeniem płatności sprawdź w aplikacji bankowej, czy rachunek, kwota i odbiorca
+zgadzają się z fakturą.** Zwróć uwagę na wypisywane ostrzeżenia (`⚠`) — sygnalizują dokładnie
+te przypadki, w których dane z faktury budzą wątpliwości.

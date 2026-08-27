@@ -3,6 +3,8 @@ name = "ksef-qr"
 version = "1.0.0"
 description = "Czyta fakturę KSeF (XML, schemat FA) i generuje kod QR z danymi przelewu"
 requires-python = ">=3.10"
+license = "GPL-2.0-only"
+license-files = ["LICENSE"]
 dependencies = ["qrcode[pil]>=7.4"]
 
 [project.optional-dependencies]

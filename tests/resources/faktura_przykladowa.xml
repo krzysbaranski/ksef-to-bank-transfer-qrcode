@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Fikcyjna faktura testowa: dane podmiotów, rachunek, VIN i numer umowy są
+     wymyślone. NIP-y i NRB mają poprawne sumy kontrolne, bo testy je walidują. -->
+<Faktura xsi:schemaLocation="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/" xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Naglowek>
+        <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+        <WariantFormularza>3</WariantFormularza>
+        <DataWytworzeniaFa>2026-01-15T08:05:30.000Z</DataWytworzeniaFa>
+        <SystemInfo>System Testowy</SystemInfo>
+    </Naglowek>
+    <Podmiot1>
+        <PrefiksPodatnika>PL</PrefiksPodatnika>
+        <DaneIdentyfikacyjne>
+            <NIP>1111111111</NIP>
+            <Nazwa>Przykładowa Spółka Finansowa Sp. z o.o.</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Testowa 1</AdresL1>
+            <AdresL2>00-001 Warszawa</AdresL2>
+        </Adres>
+    </Podmiot1>
+    <Podmiot2>
+        <DaneIdentyfikacyjne>
+            <NIP>2222222222</NIP>
+            <Nazwa>Jan Przykładowy</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Przykładowa 2/3</AdresL1>
+            <AdresL2>00-002 Warszawa</AdresL2>
+        </Adres>
+        <NrKlienta>12345678</NrKlienta>
+    </Podmiot2>
+    <Fa>
+        <KodWaluty>PLN</KodWaluty>
+        <P_1>2026-01-15</P_1>
+        <P_2>1234/0126/ABC</P_2>
+        <P_6>2026-01-15</P_6>
+        <P_13_1>450.0</P_13_1>
+        <P_14_1>103.5</P_14_1>
+        <P_15>553.5</P_15>
+        <RodzajFaktury>VAT</RodzajFaktury>
+        <DodatkowyOpis>
+            <Klucz>Numer umowy</Klucz>
+            <Wartosc>12345678-0126-00001</Wartosc>
+        </DodatkowyOpis>
+        <DodatkowyOpis>
+            <NrWiersza>1</NrWiersza>
+            <Klucz>Numer VIN</Klucz>
+            <Wartosc>TESTVIN1234567890</Wartosc>
+        </DodatkowyOpis>
+        <FaWiersz>
+            <NrWierszaFa>1</NrWierszaFa>
+            <P_7>Usługa testowa</P_7>
+            <P_8A>szt.</P_8A>
+            <P_8B>1.0</P_8B>
+            <P_9A>450.0</P_9A>
+            <P_11>450.0</P_11>
+            <P_11Vat>103.5</P_11Vat>
+            <P_12>23</P_12>
+        </FaWiersz>
+        <Platnosc>
+            <TerminPlatnosci>
+                <Termin>2026-01-29</Termin>
+            </TerminPlatnosci>
+            <FormaPlatnosci>6</FormaPlatnosci>
+            <RachunekBankowy>
+                <NrRB>34 9999 9999 1234 5678 9012 3456</NrRB>
+                <SWIFT>TESTPLPX</SWIFT>
+                <NazwaBanku>Bank Przykładowy S.A.</NazwaBanku>
+            </RachunekBankowy>
+        </Platnosc>
+    </Fa>
+</Faktura>

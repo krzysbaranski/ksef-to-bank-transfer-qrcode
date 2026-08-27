@@ -29,6 +29,26 @@ ksef-qr ./faktury --png ./kody         # wsad: katalog XML -> katalog PNG
 ksef-qr faktura.xml --payload          # sama treść kodu (do własnego generatora)
 ksef-qr faktura.xml --json | jq .      # wszystkie odczytane dane jako JSON
 ```
+
+Przykład:
+
+```
+  Faktura           1234/0126/ABC
+  Wystawiona        2026-01-15
+  Sprzedawca        Przykładowa Spółka Finansowa Sp. z o.o.
+  NIP sprzedawcy    1111111111
+  Nabywca           Jan Przykładowy
+  Rachunek          34 9999 9999 1234 5678 9012 3456
+  Kwota             553.5 PLN
+  Termin płatności  2026-01-29
+  Tytuł przelewu    FV 1234/0126/ABC
+  ⚠ nazwa odbiorcy skrócona do 20 znaków: 'Przykladowa Spolka F'
+
+  [kod QR]
+```
+
+(dane z `tests/resources/faktura_przykladowa.xml` — fikcyjnej faktury dołączonej do repozytorium)
+
 ### Nadpisywanie danych
 
 Gdy faktura nie zawiera kompletu danych albo chcesz zapłacić inaczej niż wynika z dokumentu:
@@ -51,6 +71,12 @@ Gdy faktura nie zawiera kompletu danych albo chcesz zapłacić inaczej niż wyni
 | `epc` | EPC069-12 / GiroCode (SEPA Credit Transfer). Tylko EUR. |
 
 Format ZBP to dziewięć pól rozdzielonych `|`:
+
+```
+NIP|Kraj|NRB|Kwota w groszach|Nazwa odbiorcy|Tytuł|Rezerwa|Rezerwa|Rezerwa
+1111111111|PL|34999999991234567890123456|055350|Przykladowa Spolka F|FV 1234/0126/ABC|12345678||
+```
+
 Limity narzucane przez standard (nazwa odbiorcy 20 znaków, tytuł 32) są egzekwowane, a skrócenie
 nazwy sygnalizowane ostrzeżeniem. Polskie znaki są domyślnie transliterowane do ASCII
 (`--no-ascii` wyłącza); w EPC zostają, bo standard używa UTF-8.
@@ -84,6 +110,10 @@ Zapłaty częściowe (`ZaplataCzesciowa`) pomniejszają kwotę przelewu.
 .venv/bin/python -m pytest tests -q
 ```
 
+Testy korzystają wyłącznie z fikcyjnej faktury `tests/resources/faktura_przykladowa.xml`
+(wymyślone podmioty, NIP-y i rachunki z poprawnymi sumami kontrolnymi) — żadne prawdziwe
+dane nie trafiają do repozytorium.
+
 ## Struktura
 
 ```
@@ -91,4 +121,5 @@ ksef_qr/ksef.py      parser XML KSeF (stdlib, bez zależności)
 ksef_qr/payment.py   budowa treści kodu (ZBP, EPC) + walidacja IBAN/NRB
 ksef_qr/render.py    rysowanie QR w terminalu, zapis PNG/SVG
 ksef_qr/cli.py       argumenty, podsumowanie, obsługa wsadu
+tests/resources/     fikcyjna faktura używana w testach
 ```

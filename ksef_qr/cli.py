@@ -266,6 +266,14 @@ def zbuduj_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("pliki", nargs="+", metavar="XML", help="pliki XML lub katalogi")
     parser.add_argument("--version", action="version", version=f"ksef-qr {__version__}")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=(
+            f"ksef-qr {__version__}\n"
+            "Licencja GPL-2.0-only. Program nie jest objęty ŻADNĄ GWARANCJĄ."
+        ),
+    )
 
     grupa = parser.add_argument_group("dane przelewu")
     grupa.add_argument(

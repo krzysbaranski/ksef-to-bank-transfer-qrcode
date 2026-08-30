@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ksef_qr import ksef, payment
+from ksef_qr import ksef, payment, whitelist
 from ksef_qr.cli import main
 
 PRZYKLAD = str(Path(__file__).resolve().parent / "resources" / "faktura_przykladowa.xml")
@@ -263,3 +263,148 @@ def test_cli_ostrzega_o_zamienionych_polach(tmp_path, capsys):
     )
     assert main([str(plik), "--no-qr", "--no-color"]) == 0
     assert "zamienił pola rachunku" in capsys.readouterr().out
+
+
+# --- biała lista podatników VAT ---------------------------------------------
+
+def _odpowiedz(przypisany: str) -> dict:
+    return {
+        "result": {
+            "accountAssigned": przypisany,
+            "requestId": "TEST-1",
+            "requestDateTime": "28-08-2026 12:00:00",
+        }
+    }
+
+
+@pytest.fixture(autouse=True)
+def bez_prawdziwej_sieci(monkeypatch):
+    """Żaden test nie może odpytać prawdziwego API MF."""
+    wywolania = []
+
+    def falszywe(url, timeout):
+        wywolania.append(url)
+        return _odpowiedz("TAK")
+
+    monkeypatch.setattr(whitelist, "_pobierz_json", falszywe)
+    whitelist.wyczysc_cache()
+    yield wywolania
+    whitelist.wyczysc_cache()
+
+
+def test_biala_lista_potwierdza_rachunek(bez_prawdziwej_sieci):
+    wynik = whitelist.sprawdz("1111111111", "34999999991234567890123456", data="2026-01-15")
+    assert wynik.status == whitelist.POTWIERDZONY
+    assert wynik.potwierdzony
+    assert wynik.znacznik == "✓"
+    assert wynik.request_id == "TEST-1"
+    assert bez_prawdziwej_sieci == [
+        "https://wl-api.mf.gov.pl/api/check/nip/1111111111"
+        "/bank-account/34999999991234567890123456?date=2026-01-15"
+    ]
+
+
+def test_biala_lista_odrzuca_rachunek(monkeypatch):
+    monkeypatch.setattr(whitelist, "_pobierz_json", lambda url, timeout: _odpowiedz("NIE"))
+    wynik = whitelist.sprawdz("1111111111", "34999999991234567890123456")
+    assert wynik.status == whitelist.NIEPOTWIERDZONY
+    assert not wynik.potwierdzony
+    assert wynik.znacznik == "✗"
+
+
+def test_biala_lista_normalizuje_nrb_ze_spacjami(bez_prawdziwej_sieci):
+    whitelist.sprawdz("111-111-11-11", "PL 34 9999 9999 1234 5678 9012 3456", data="2026-01-15")
+    assert "nip/1111111111/bank-account/34999999991234567890123456" in bez_prawdziwej_sieci[0]
+
+
+def test_biala_lista_nie_pyta_o_zly_nip(bez_prawdziwej_sieci):
+    wynik = whitelist.sprawdz("123", "34999999991234567890123456")
+    assert wynik.status == whitelist.NIESPRAWDZONY
+    assert "NIP" in wynik.komunikat
+    assert bez_prawdziwej_sieci == []
+
+
+def test_biala_lista_nie_pyta_o_zagraniczny_iban(bez_prawdziwej_sieci):
+    wynik = whitelist.sprawdz("1111111111", "DE89370400440532013000")
+    assert wynik.status == whitelist.NIESPRAWDZONY
+    assert "NRB" in wynik.komunikat
+    assert bez_prawdziwej_sieci == []
+
+
+def test_biala_lista_przezywa_brak_sieci(monkeypatch):
+    import urllib.error
+
+    def padnij(url, timeout):
+        raise urllib.error.URLError("nie ma internetu")
+
+    monkeypatch.setattr(whitelist, "_pobierz_json", padnij)
+    wynik = whitelist.sprawdz("1111111111", "34999999991234567890123456")
+    assert wynik.status == whitelist.NIESPRAWDZONY
+    assert "brak połączenia" in wynik.komunikat
+
+
+def test_biala_lista_przezywa_blad_http(monkeypatch):
+    import io
+    import urllib.error
+
+    def padnij(url, timeout):
+        raise urllib.error.HTTPError(
+            url, 400, "Bad Request", {},
+            io.BytesIO(b'{"message":"Niepoprawna data","code":"WL-112"}'),
+        )
+
+    monkeypatch.setattr(whitelist, "_pobierz_json", padnij)
+    wynik = whitelist.sprawdz("1111111111", "34999999991234567890123456")
+    assert wynik.status == whitelist.NIESPRAWDZONY
+    assert "Niepoprawna data (WL-112)" in wynik.komunikat
+
+
+def test_biala_lista_cachuje_odpowiedzi(bez_prawdziwej_sieci):
+    for _ in range(3):
+        whitelist.sprawdz("1111111111", "34999999991234567890123456", data="2026-01-15")
+    assert len(bez_prawdziwej_sieci) == 1
+
+
+def test_cli_domyslnie_sprawdza_biala_liste(bez_prawdziwej_sieci, capsys):
+    assert main([PRZYKLAD, "--no-qr", "--no-color"]) == 0
+    wyjscie = capsys.readouterr().out
+    assert "Biała lista VAT" in wyjscie
+    assert "✓ rachunek przypisany do NIP sprzedawcy" in wyjscie
+    assert len(bez_prawdziwej_sieci) == 1
+
+
+def test_cli_no_whitelist_nie_rusza_sieci(bez_prawdziwej_sieci, capsys):
+    assert main([PRZYKLAD, "--no-qr", "--no-color", "--no-whitelist"]) == 0
+    assert "Biała lista" not in capsys.readouterr().out
+    assert bez_prawdziwej_sieci == []
+
+
+def test_cli_ostrzega_gdy_rachunek_niepotwierdzony(monkeypatch, capsys):
+    monkeypatch.setattr(whitelist, "_pobierz_json", lambda url, timeout: _odpowiedz("NIE"))
+    assert main([PRZYKLAD, "--no-qr", "--no-color"]) == 0
+    wyjscie = capsys.readouterr().out
+    assert "✗" in wyjscie
+    assert "BIAŁA LISTA" in wyjscie
+
+
+def test_cli_strict_whitelist_konczy_bledem(monkeypatch, capsys):
+    monkeypatch.setattr(whitelist, "_pobierz_json", lambda url, timeout: _odpowiedz("NIE"))
+    assert main([PRZYKLAD, "--no-qr", "--strict-whitelist"]) == 1
+    assert "biała lista" in capsys.readouterr().err
+
+
+def test_cli_json_zawiera_wynik_biale_listy(capsys):
+    import json
+
+    assert main([PRZYKLAD, "--json"]) == 0
+    dane = json.loads(capsys.readouterr().out)
+    assert dane["biala_lista"]["status"] == "potwierdzony"
+    assert dane["biala_lista"]["request_id"] == "TEST-1"
+
+
+def test_cli_payload_kieruje_ostrzezenia_na_stderr(monkeypatch, capsys):
+    monkeypatch.setattr(whitelist, "_pobierz_json", lambda url, timeout: _odpowiedz("NIE"))
+    assert main([PRZYKLAD, "--payload"]) == 0
+    zebrane = capsys.readouterr()
+    assert zebrane.out.strip().startswith("1111111111|PL|")
+    assert "BIAŁA LISTA" in zebrane.err

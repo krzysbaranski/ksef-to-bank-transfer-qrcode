@@ -9,7 +9,7 @@ import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from . import __version__, ksef, payment, render
+from . import __version__, ksef, payment, render, whitelist
 
 
 def _sciezki(wzorce: list[str]) -> list[Path]:
@@ -94,8 +94,25 @@ def _dane_przelewu(
     ), rachunek
 
 
+def _sprawdz_biala_liste(
+    faktura: ksef.Faktura, dane: payment.DanePrzelewu, argumenty: argparse.Namespace
+) -> whitelist.WynikBialejListy | None:
+    """Zwraca None, gdy użytkownik wyłączył sprawdzenie (--no-whitelist)."""
+    if not argumenty.whitelist:
+        return None
+    return whitelist.sprawdz(
+        dane.nip,
+        dane.iban,
+        data=argumenty.whitelist_date,
+        timeout=argumenty.whitelist_timeout,
+    )
+
+
 def _podsumowanie(
-    faktura: ksef.Faktura, dane: payment.DanePrzelewu, ostrzezenia: list[str]
+    faktura: ksef.Faktura,
+    dane: payment.DanePrzelewu,
+    ostrzezenia: list[str],
+    biala_lista: whitelist.WynikBialejListy | None = None,
 ) -> str:
     nrb = dane.iban
     nrb_czytelny = " ".join(
@@ -113,6 +130,11 @@ def _podsumowanie(
         ("Termin płatności", faktura.termin_platnosci or "—"),
         ("Tytuł przelewu", dane.tytul),
     ]
+    if biala_lista is not None:
+        wiersze.insert(
+            6,
+            ("Biała lista VAT", f"{biala_lista.znacznik} {biala_lista.komunikat}"),
+        )
     if faktura.zaplata_czesciowa:
         wiersze.insert(
             7, ("Zapłacono częściowo", f"{faktura.zaplata_czesciowa} {faktura.waluta}")
@@ -126,9 +148,17 @@ def _podsumowanie(
 
 
 def _ostrzezenia(
-    faktura: ksef.Faktura, dane: payment.DanePrzelewu, rachunek: ksef.Rachunek
+    faktura: ksef.Faktura,
+    dane: payment.DanePrzelewu,
+    rachunek: ksef.Rachunek,
+    biala_lista: whitelist.WynikBialejListy | None = None,
 ) -> list[str]:
     lista = []
+    if biala_lista is not None and biala_lista.status == whitelist.NIEPOTWIERDZONY:
+        lista.append(
+            "BIAŁA LISTA: rachunku nie potwierdzono dla NIP sprzedawcy — "
+            "nie wykonuj przelewu bez kontaktu z wystawcą"
+        )
     if rachunek.pola_zamienione:
         lista.append(
             "wystawca zamienił pola rachunku miejscami — numer odczytany "
@@ -154,7 +184,12 @@ def _ostrzezenia(
     return lista
 
 
-def _slownik(faktura: ksef.Faktura, dane: payment.DanePrzelewu, tresc: str) -> dict:
+def _slownik(
+    faktura: ksef.Faktura,
+    dane: payment.DanePrzelewu,
+    tresc: str,
+    biala_lista: whitelist.WynikBialejListy | None = None,
+) -> dict:
     return {
         "faktura": {
             "numer": faktura.numer,
@@ -197,6 +232,16 @@ def _slownik(faktura: ksef.Faktura, dane: payment.DanePrzelewu, tresc: str) -> d
             "waluta": dane.waluta,
             "tytul": dane.tytul,
         },
+        "biala_lista": (
+            None
+            if biala_lista is None
+            else {
+                "status": biala_lista.status,
+                "komunikat": biala_lista.komunikat,
+                "data": biala_lista.data,
+                "request_id": biala_lista.request_id,
+            }
+        ),
         "qr": tresc,
     }
 
@@ -205,18 +250,36 @@ def _przetworz(sciezka: Path, argumenty: argparse.Namespace, wiele: bool) -> dic
     faktura = ksef.parsuj_plik(str(sciezka))
     dane, rachunek = _dane_przelewu(faktura, argumenty)
     tresc = payment.zbuduj(argumenty.standard, dane, argumenty.ascii)
+    biala_lista = _sprawdz_biala_liste(faktura, dane, argumenty)
+
+    if (
+        argumenty.strict_whitelist
+        and biala_lista is not None
+        and not biala_lista.potwierdzony
+    ):
+        raise payment.PaymentDataError(f"biała lista: {biala_lista.komunikat}")
 
     if argumenty.json:
-        return _slownik(faktura, dane, tresc)
+        return _slownik(faktura, dane, tresc, biala_lista)
 
     if argumenty.payload:
         print(tresc)
+        # stdout zostaje czysty do przekierowania, ostrzeżenia idą na stderr.
+        for ostrzezenie in _ostrzezenia(faktura, dane, rachunek, biala_lista):
+            print(f"{sciezka}: ⚠ {ostrzezenie}", file=sys.stderr)
         return None
 
     if wiele:
         print(f"\n\x1b[1m{sciezka.name}\x1b[0m" if _kolor_wlaczony(argumenty) else f"\n{sciezka.name}")
 
-    print(_podsumowanie(faktura, dane, _ostrzezenia(faktura, dane, rachunek)))
+    print(
+        _podsumowanie(
+            faktura,
+            dane,
+            _ostrzezenia(faktura, dane, rachunek, biala_lista),
+            biala_lista,
+        )
+    )
     print()
 
     qr = render.zbuduj_qr(tresc, border=argumenty.border)
@@ -265,7 +328,14 @@ def zbuduj_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("pliki", nargs="+", metavar="XML", help="pliki XML lub katalogi")
-    parser.add_argument("--version", action="version", version=f"ksef-qr {__version__}")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=(
+            f"ksef-qr {__version__}\n"
+            "Licencja GPL-2.0-only. Program nie jest objęty ŻADNĄ GWARANCJĄ."
+        ),
+    )
 
     grupa = parser.add_argument_group("dane przelewu")
     grupa.add_argument(
@@ -297,6 +367,32 @@ def zbuduj_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=None,
         help="transliteruj polskie znaki (domyślnie tak dla zbp, nie dla epc)",
+    )
+
+    lista = parser.add_argument_group("biała lista podatników VAT")
+    lista.add_argument(
+        "--whitelist",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="sprawdź rachunek na białej liście MF wg NIP sprzedawcy "
+        "(--no-whitelist pomija to sprawdzenie i pracuje bez sieci)",
+    )
+    lista.add_argument(
+        "--whitelist-date",
+        metavar="RRRR-MM-DD",
+        help="dzień, na który sprawdzany jest rachunek (domyślnie dziś)",
+    )
+    lista.add_argument(
+        "--whitelist-timeout",
+        type=float,
+        default=10.0,
+        metavar="SEK",
+        help="limit czasu zapytania do API (domyślnie 10)",
+    )
+    lista.add_argument(
+        "--strict-whitelist",
+        action="store_true",
+        help="przerwij z błędem, jeśli rachunek nie został potwierdzony",
     )
 
     wyjscie = parser.add_argument_group("wyjście")

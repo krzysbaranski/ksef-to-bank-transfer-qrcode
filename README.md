@@ -28,6 +28,7 @@ ksef-qr faktura.xml --png qr.png       # dodatkowo zapis do PNG
 ksef-qr ./faktury --png ./kody         # wsad: katalog XML -> katalog PNG
 ksef-qr faktura.xml --payload          # sama treść kodu (do własnego generatora)
 ksef-qr faktura.xml --json | jq .      # wszystkie odczytane dane jako JSON
+ksef-qr faktura.xml --no-whitelist     # bez odpytywania API, całkowicie offline
 ```
 
 Przykład:
@@ -39,6 +40,7 @@ Przykład:
   NIP sprzedawcy    1111111111
   Nabywca           Jan Przykładowy
   Rachunek          34 9999 9999 1234 5678 9012 3456
+  Biała lista VAT   ✓ rachunek przypisany do NIP sprzedawcy
   Kwota             553.5 PLN
   Termin płatności  2026-01-29
   Tytuł przelewu    FV 1234/0126/ABC
@@ -90,10 +92,45 @@ adnotacje o zapłacie oraz `DodatkowyOpis`.
 
 Parser ignoruje namespace schemy, więc działa z FA(1), FA(2) i FA(3) bez zmian.
 
+## Biała lista podatników VAT
+
+Domyślnie przed wygenerowaniem kodu narzędzie pyta [API Ministerstwa Finansów](https://wl-api.mf.gov.pl/),
+czy rachunek z faktury jest przypisany do NIP sprzedawcy:
+
+```
+GET https://wl-api.mf.gov.pl/api/check/nip/{NIP}/bank-account/{NRB}?date=RRRR-MM-DD
+```
+
+| Opcja | Działanie |
+| --- | --- |
+| `--no-whitelist` | pomija sprawdzenie — jedyny tryb działający bez sieci |
+| `--whitelist-date RRRR-MM-DD` | sprawdza stan na wskazany dzień (domyślnie dziś) |
+| `--whitelist-timeout SEK` | limit czasu zapytania (domyślnie 10 s) |
+| `--strict-whitelist` | kończy z kodem 1, gdy rachunek nie został potwierdzony |
+
+Wynik pojawia się w podsumowaniu jako `Biała lista VAT` i w JSON-ie pod kluczem `biala_lista`
+(ze statusem, komunikatem, datą i `requestId` — MF traktuje ten identyfikator jako dowód
+dochowania należytej staranności, więc warto go zachować przy większych przelewach).
+
+Trzy rzeczy, o których trzeba wiedzieć:
+
+- **`✗` nie znaczy „oszustwo".** API zwraca `NIE` także wtedy, gdy NIP nie istnieje albo
+  sprzedawca nie jest czynnym podatnikiem VAT. Rachunki podmiotów zwolnionych z VAT i osób
+  prywatnych nigdy nie będą potwierdzone.
+- **Rachunki wirtualne** przypisane do rachunku masowego zwykle są rozpoznawane, ale nie zawsze —
+  przy `✗` warto najpierw zadzwonić do wystawcy.
+- **Sprawdzenie dotyczy tylko polskich NRB i wymaga sieci.** Dla zagranicznych IBAN-ów oraz
+  bez połączenia status to `?` (niesprawdzony), a program działa dalej — brak API nigdy nie
+  blokuje wygenerowania kodu.
+
+Odpowiedzi są cache'owane w obrębie jednego uruchomienia, więc wsad kilkunastu faktur od tego
+samego wystawcy to jedno zapytanie.
+
 ## Kontrole i ostrzeżenia
 
 Przed wygenerowaniem kodu narzędzie sprawdza i sygnalizuje:
 
+- rachunek niepotwierdzony na białej liście VAT (patrz sekcja wyżej),
 - niepoprawną sumę kontrolną numeru rachunku (mod 97 wg ISO 13616),
 - zamienione miejscami pola rachunku (spotykany błąd wystawców: numer rachunku
   w `NazwaBanku`, nazwa banku w `NrRB`) — numer jest odzyskiwany, ale sygnalizowany,
@@ -112,13 +149,15 @@ Zapłaty częściowe (`ZaplataCzesciowa`) pomniejszają kwotę przelewu.
 
 Testy korzystają wyłącznie z fikcyjnej faktury `tests/resources/faktura_przykladowa.xml`
 (wymyślone podmioty, NIP-y i rachunki z poprawnymi sumami kontrolnymi) — żadne prawdziwe
-dane nie trafiają do repozytorium.
+dane nie trafiają do repozytorium. Warstwa sieciowa białej listy jest w testach
+podmieniana, więc suite nie odpytuje API MF.
 
 ## Struktura
 
 ```
 ksef_qr/ksef.py      parser XML KSeF (stdlib, bez zależności)
 ksef_qr/payment.py   budowa treści kodu (ZBP, EPC) + walidacja IBAN/NRB
+ksef_qr/whitelist.py klient API białej listy podatników VAT
 ksef_qr/render.py    rysowanie QR w terminalu, zapis PNG/SVG
 ksef_qr/cli.py       argumenty, podsumowanie, obsługa wsadu
 tests/resources/     fikcyjna faktura używana w testach
